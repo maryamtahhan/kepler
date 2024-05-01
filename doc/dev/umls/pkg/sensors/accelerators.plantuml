@@ -1,0 +1,167 @@
+@startuml
+namespace accelerator {
+    interface Accelerator  {
+        + StartupAccelerator() error
+        + GetAccelerator() device.AcceleratorInterface
+        + GetAcceleratorType() string
+        + IsRunning() bool
+        + StopAccelerator() error
+
+    }
+    class accelerator << (S,Aquamarine) >> {
+        - acc device.AcceleratorInterface
+        - accType string
+        - running bool
+        - installedtime v1.Time
+
+        + StartupAccelerator() error
+        + StopAccelerator() error
+        + GetAcceleratorType() string
+        + IsRunning() bool
+        + GetAccelerator() device.AcceleratorInterface
+
+    }
+}
+
+"accelerator.Accelerator" <|-- "accelerator.accelerator"
+
+namespace device {
+    interface AcceleratorInterface  {
+        + GetName() string
+        + GetType() string
+        + GetHwType() string
+        + InitLib() error
+        + Init() error
+        + Shutdown() bool
+        + GetDevices() <font color=blue>map</font>[int]Device
+        + GetDeviceInstances() <font color=blue>map</font>[int]<font color=blue>map</font>[int]Device
+        + GetAbsEnergyFromDevice() []uint32
+        + GetProcessResourceUtilizationPerDevice(device Device, since time.Duration) (<font color=blue>map</font>[uint32]ProcessUtilizationSample, error)
+        + IsDeviceCollectionSupported() bool
+        + SetDeviceCollectionSupported( bool)
+
+    }
+    class Device << (S,Aquamarine) >> {
+        + DeviceHandler <font color=blue>interface</font>{}
+        + ID int
+        + IsSubdevice bool
+        + ParentID int
+        + MIGSMRatio float64
+
+    }
+    class ProcessUtilizationSample << (S,Aquamarine) >> {
+        + Pid uint32
+        + TimeStamp uint64
+        + ComputeUtil uint32
+        + MemUtil uint32
+        + EncUtil uint32
+        + DecUtil uint32
+
+    }
+}
+
+accelerator.accelerator *-- device.AcceleratorInterface
+
+
+
+namespace sources {
+    class Dummy << (S,Aquamarine) >> {
+        - deviceType string
+        - name string
+        - collectionSupported bool
+
+        + GetName() string
+        + GetType() string
+        + GetHwType() string
+        + InitLib() error
+        + Init() error
+        + Shutdown() bool
+        + GetAbsEnergyFromDevice() []uint32
+        + GetDevices() <font color=blue>map</font>[int]device.Device
+        + GetDeviceInstances() <font color=blue>map</font>[int]<font color=blue>map</font>[int]device.Device
+        + GetProcessResourceUtilizationPerDevice(device device.Device, since time.Duration) (<font color=blue>map</font>[uint32]device.ProcessUtilizationSample, error)
+        + IsDeviceCollectionSupported() bool
+        + SetDeviceCollectionSupported(supported bool)
+
+    }
+
+    class GPUDcgm << (S,Aquamarine) >> {
+        - collectionSupported bool
+        - devices <font color=blue>map</font>[int]device.Device
+        - migDevices <font color=blue>map</font>[int]<font color=blue>map</font>[int]device.Device
+        - libInited bool
+        - deviceGroupName string
+        - deviceGroupHandle dcgm.GroupHandle
+        - fieldGroupName string
+        - fieldGroupHandle dcgm.FieldHandle
+        - cleanup <font color=blue>func</font>()
+
+        - loadDevices() error
+        - loadMIGProfiles()
+        - initNVML() error
+        - createDeviceGroup() error
+        - addDevicesToGroup() error
+        - createFieldGroup() error
+        - setupWatcher() error
+
+        + Init() error
+        + InitLib() error
+        + LoadMIGDevices()
+        + GetName() string
+        + GetType() string
+        + GetHwType() string
+        + IsDeviceCollectionSupported() bool
+        + SetDeviceCollectionSupported(supported bool)
+        + Shutdown() bool
+        + GetAbsEnergyFromDevice() []uint32
+        + GetDevices() <font color=blue>map</font>[int]device.Device
+        + GetDeviceInstances() <font color=blue>map</font>[int]<font color=blue>map</font>[int]device.Device
+        + GetProcessResourceUtilizationPerDevice(device device.Device, since time.Duration) (<font color=blue>map</font>[uint32]device.ProcessUtilizationSample, error)
+
+    }
+
+    class GPUHabana << (S,Aquamarine) >> {
+        - collectionSupported bool
+        - devices <font color=blue>map</font>[int]device.Device
+
+        + GetName() string
+        + GetType() string
+        + GetHwType() string
+        + InitLib() error
+        + Init() error
+        + Shutdown() bool
+        + GetAbsEnergyFromDevice() []uint32
+        + GetDevices() <font color=blue>map</font>[int]device.Device
+        + GetDeviceInstances() <font color=blue>map</font>[int]<font color=blue>map</font>[int]device.Device
+        + GetProcessResourceUtilizationPerDevice(device device.Device, since time.Duration) (<font color=blue>map</font>[uint32]device.ProcessUtilizationSample, error)
+        + IsDeviceCollectionSupported() bool
+        + SetDeviceCollectionSupported(supported bool)
+
+    }
+
+    class GPUNvml << (S,Aquamarine) >> {
+        - libInited bool
+        - collectionSupported bool
+
+        + GetName() string
+        + GetHwType() string
+        + GetType() string
+        + IsDeviceCollectionSupported() bool
+        + SetDeviceCollectionSupported(supported bool)
+        + InitLib() error
+        + Init() error
+        + Shutdown() bool
+        + GetDevices() <font color=blue>map</font>[int]device.Device
+        + GetDeviceInstances() <font color=blue>map</font>[int]<font color=blue>map</font>[int]device.Device
+        + GetAbsEnergyFromDevice() []uint32
+        + GetProcessResourceUtilizationPerDevice(device device.Device, since time.Duration) (<font color=blue>map</font>[uint32]device.ProcessUtilizationSample, error)
+
+    }
+}
+
+"device.AcceleratorInterface" <|-- "sources.Dummy"
+"device.AcceleratorInterface" <|-- "sources.GPUDcgm"
+"device.AcceleratorInterface" <|-- "sources.GPUHabana"
+"device.AcceleratorInterface" <|-- "sources.GPUNvml"
+
+@enduml

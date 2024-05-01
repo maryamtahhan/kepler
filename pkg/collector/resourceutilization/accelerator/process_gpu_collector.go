@@ -26,8 +26,9 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/collector/stats"
 	"github.com/sustainable-computing-io/kepler/pkg/config"
 	"github.com/sustainable-computing-io/kepler/pkg/libvirt"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu"
-	gpu_source "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu/source"
+	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator"
+	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device"
+	dev "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device"
 	"k8s.io/klog/v2"
 
 	"github.com/sustainable-computing-io/kepler/pkg/utils"
@@ -44,28 +45,33 @@ var (
 
 // UpdateProcessGPUUtilizationMetrics reads the GPU metrics of each process using the GPU
 func UpdateProcessGPUUtilizationMetrics(processStats map[uint64]*stats.ProcessStats, bpfSupportedMetrics bpf.SupportedMetrics) {
-	// calculate the gpu's processes energy consumption for each gpu
-	migDevices := gpu.GetMIGInstances()
-	for _, device := range gpu.GetGpus() {
-		// we need to use MIG device handler if the GPU has MIG slices, otherwise, we use the GPU device handler
-		if _, hasMIG := migDevices[device.GPUID]; !hasMIG {
-			addGPUUtilizationToProcessStats(processStats, device, device.GPUID, bpfSupportedMetrics)
-		} else {
-			// if the device has MIG slices, we should collect the process information directly from the MIG device handler
-			for _, migDevice := range migDevices[device.GPUID] {
-				// device.GPUID is equal to migDevice.ParentGpuID
-				// we add the process metrics with the parent GPU ID, so that the Ratio power model will use this data to split the GPU power among the process
-				addGPUUtilizationToProcessStats(processStats, migDevice, migDevice.ParentGpuID, bpfSupportedMetrics)
+	for _, a := range acc.GetAccelerators() {
+		d := a.GetAccelerator()
+		if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
+			migDevices := d.GetDeviceInstances()
+			for _, _device := range d.GetDevices() {
+				// we need to use MIG device handler if the GPU has MIG slices, otherwise, we use the GPU device handler
+				if _, hasMIG := migDevices[_device.ID]; !hasMIG {
+					addGPUUtilizationToProcessStats(d, processStats, _device, _device.ID, bpfSupportedMetrics)
+				} else {
+					// if the device has MIG slices, we should collect the process information directly from the MIG device handler
+					for _, migDevice := range migDevices[_device.ID] {
+						// device.ID is equal to migDevice.ParentID
+						// we add the process metrics with the parent GPU ID, so that the Ratio power model will use this data to split the GPU power among the process
+						addGPUUtilizationToProcessStats(d, processStats, migDevice, migDevice.ParentID, bpfSupportedMetrics)
+					}
+				}
 			}
 		}
 	}
 	lastUtilizationTimestamp = time.Now()
 }
 
-func addGPUUtilizationToProcessStats(processStats map[uint64]*stats.ProcessStats, device gpu_source.Device, gpuID int, bpfSupportedMetrics bpf.SupportedMetrics) {
+func addGPUUtilizationToProcessStats(ai dev.AcceleratorInterface, processStats map[uint64]*stats.ProcessStats, d dev.Device, gpuID int, bpfSupportedMetrics bpf.SupportedMetrics) {
 	var err error
-	var processesUtilization map[uint32]gpu_source.ProcessUtilizationSample
-	if processesUtilization, err = gpu.GetProcessResourceUtilizationPerDevice(device, time.Since(lastUtilizationTimestamp)); err != nil {
+	var processesUtilization map[uint32]device.ProcessUtilizationSample
+
+	if processesUtilization, err = ai.GetProcessResourceUtilizationPerDevice(d, time.Since(lastUtilizationTimestamp)); err != nil {
 		klog.Infoln(err)
 		return
 	}

@@ -32,7 +32,7 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/collector/stats"
 	"github.com/sustainable-computing-io/kepler/pkg/config"
 	"github.com/sustainable-computing-io/kepler/pkg/model"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu"
+	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/qat"
 	"github.com/sustainable-computing-io/kepler/pkg/utils"
 
@@ -193,8 +193,13 @@ func (c *Collector) updateProcessResourceUtilizationMetrics(wg *sync.WaitGroup) 
 	// update process metrics regarding the resource utilization to be used to calculate the energy consumption
 	// we first updates the bpf which is resposible to include new processes in the ProcessStats collection
 	resourceBpf.UpdateProcessBPFMetrics(c.bpfExporter, c.ProcessStats)
-	if config.EnabledGPU && gpu.IsGPUCollectionSupported() {
-		accelerator.UpdateProcessGPUUtilizationMetrics(c.ProcessStats, c.bpfSupportedMetrics)
+	if config.EnabledGPU {
+		for _, a := range acc.GetAccelerators() {
+			d := a.GetAccelerator()
+			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
+				accelerator.UpdateProcessGPUUtilizationMetrics(c.ProcessStats, c.bpfSupportedMetrics)
+			}
+		}
 	}
 }
 

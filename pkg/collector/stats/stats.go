@@ -23,7 +23,7 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/bpf"
 	"github.com/sustainable-computing-io/kepler/pkg/collector/stats/types"
 	"github.com/sustainable-computing-io/kepler/pkg/config"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu"
+	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator"
 	"k8s.io/klog/v2"
 )
 
@@ -73,9 +73,15 @@ func NewStats(bpfSupportedMetrics bpf.SupportedMetrics) *Stats {
 		m.ResourceUsage[metricName] = types.NewUInt64StatCollection()
 	}
 
-	if config.EnabledGPU && gpu.IsGPUCollectionSupported() {
-		m.ResourceUsage[config.GPUComputeUtilization] = types.NewUInt64StatCollection()
-		m.ResourceUsage[config.GPUMemUtilization] = types.NewUInt64StatCollection()
+	if config.EnabledGPU {
+		for _, a := range acc.GetAccelerators() {
+			d := a.GetAccelerator()
+			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
+				m.ResourceUsage[config.GPUComputeUtilization] = types.NewUInt64StatCollection()
+				m.ResourceUsage[config.GPUMemUtilization] = types.NewUInt64StatCollection()
+				m.ResourceUsage[config.IdleEnergyInGPU] = types.NewUInt64StatCollection()
+			}
+		}
 	}
 
 	if config.IsExposeQATMetricsEnabled() {
@@ -136,10 +142,16 @@ func (m *Stats) UpdateDynEnergy() {
 		m.CalcDynEnergy(config.AbsEnergyInPlatform, config.IdleEnergyInPlatform, config.DynEnergyInPlatform, sensorID)
 	}
 	// gpu metric
-	if config.EnabledGPU && gpu.IsGPUCollectionSupported() {
-		for gpuID := range m.EnergyUsage[config.AbsEnergyInGPU].Stat {
-			m.CalcDynEnergy(config.AbsEnergyInGPU, config.IdleEnergyInGPU, config.DynEnergyInGPU, gpuID)
+	if config.EnabledGPU {
+		for _, a := range acc.GetAccelerators() {
+			d := a.GetAccelerator()
+			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
+				for gpuID := range m.EnergyUsage[config.AbsEnergyInGPU].Stat {
+					m.CalcDynEnergy(config.AbsEnergyInGPU, config.IdleEnergyInGPU, config.DynEnergyInGPU, gpuID)
+				}
+			}
 		}
+
 	}
 }
 

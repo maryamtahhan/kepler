@@ -50,10 +50,16 @@ else
 	GC_FLAGS =
 endif
 
+ACC_TAGS := ' dummy '
 GENERAL_TAGS := 'include_gcs include_oss containers_image_openpgp gssapi providerless netgo osusergo libbpf '
-GPU_TAGS := ' gpu '
+ifeq ($(shell ldconfig -p | grep -q libnvidia-ml.so && echo exists),exists)
+	ACC_TAGS := ' nvml '
+endif
+ifeq ($(shell ldconfig -p | grep -q libdcgm.so && echo exists),exists)
+	ACC_TAGS := ' dcgm '
+endif
 ifeq ($(shell ldconfig -p | grep -q libhlml.so && echo exists),exists)
-	GPU_TAGS := $(GPU_TAGS)'habana '
+	ACC_TAGS := ' habana '
 endif
 
 GO_LD_FLAGS := $(GC_FLAGS) -ldflags "-X $(LD_FLAGS)" $(CFLAGS)
@@ -68,7 +74,7 @@ GOENV = GO111MODULE="" GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=1 CC=clang CGO_
 
 DOCKERFILE := $(SRC_ROOT)/build/Dockerfile
 IMAGE_BUILD_TAG := $(GIT_VERSION)-linux-$(GOARCH)
-GO_BUILD_TAGS := $(GENERAL_TAGS)$(GOOS)$(GPU_TAGS)
+GO_BUILD_TAGS := $(GENERAL_TAGS)$(GOOS)$(ACC_TAGS)
 GO_TEST_TAGS := $(GENERAL_TAGS)$(GOOS)
 
 # for testsuite
@@ -235,6 +241,8 @@ cross-build: clean_build_local cross-build-linux-amd64 cross-build-linux-arm64 c
 tidy-vendor:
 	go mod tidy -v
 	go mod vendor
+	@echo "Tidy hlml.go for habana build only"
+	sed -i 's/cgo LDFLAGS/cgo habana LDFLAGS/g' vendor/github.com/HabanaAI/gohlml/hlml.go
 
 .PHONY: ginkgo-set
 ginkgo-set:
@@ -263,9 +271,9 @@ container_test:
 
 VERBOSE ?= 0
 TMPDIR := $(shell mktemp -d)
-TEST_PKGS := $(shell go list ./... | grep -v pkg/bpf | grep -v e2e)
+TEST_PKGS := $(shell go list -tags $(GO_BUILD_TAGS) ./... | grep -v pkg/bpf | grep -v e2e)
 SUDO?=sudo
-SUDO_TEST_PKGS := $(shell go list ./... | grep pkg/bpf)
+SUDO_TEST_PKGS := $(shell go list -tags $(GO_BUILD_TAGS) ./... | grep pkg/bpf)
 
 .PHONY: test
 test: unit-test bpf-test bench ## Run all tests.

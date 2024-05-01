@@ -68,6 +68,7 @@ var (
 
 	KeplerNamespace              = getConfig("KEPLER_NAMESPACE", defaultNamespace)
 	EnabledEBPFCgroupID          = getBoolConfig("ENABLE_EBPF_CGROUPID", true)
+	EnabledDummy                 = getBoolConfig("ENABLE_DUMMY", false)
 	EnabledGPU                   = getBoolConfig("ENABLE_GPU", false)
 	EnabledQAT                   = getBoolConfig("ENABLE_QAT", false)
 	EnableProcessStats           = getBoolConfig("ENABLE_PROCESS_METRICS", false)
@@ -340,6 +341,12 @@ func IsExposeCPUFrequencyMetricsEnabled() bool {
 // IsExposeCPUFrequencyMetricsEnabled returns false if CPUFrequency metrics are disabled to minimize overhead.
 func IsExposeQATMetricsEnabled() bool {
 	return EnabledQAT
+}
+
+// SetEnabledDummy enables the exposure of dummy accelerator metrics
+func SetEnabledDummy(enabled bool) {
+	// set to true if any config source set it to true
+	EnabledDummy = enabled || EnabledDummy
 }
 
 // SetEnabledGPU enables the exposure of gpu metrics

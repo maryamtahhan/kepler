@@ -28,7 +28,8 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/collector/stats"
 	"github.com/sustainable-computing-io/kepler/pkg/config"
 	"github.com/sustainable-computing-io/kepler/pkg/manager"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu"
+	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator"
+	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/qat"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/components"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/platform"
@@ -41,14 +42,15 @@ import (
 
 const (
 	// to change these msg, you also need to update the e2e test
-	finishingMsg    = "Exiting..."
-	startedMsg      = "Started Kepler in %s"
-	maxGPUInitRetry = 10
+	finishingMsg       = "Exiting..."
+	startedMsg         = "Started Kepler in %s"
+	maxDeviceInitRetry = 10
 )
 
 var (
 	address                      = flag.String("address", "0.0.0.0:8888", "bind address")
 	metricsPath                  = flag.String("metrics-path", "/metrics", "metrics path")
+	enableDummy                  = flag.Bool("enable-dummy", false, "Dummy trial") //TODO FOR TESTING ONLY
 	enableGPU                    = flag.Bool("enable-gpu", false, "whether enable gpu (need to have libnvidia-ml installed)")
 	enableQAT                    = flag.Bool("enable-qat", false, "whether enable qat (need to have Intel QAT driver installed)")
 	enabledEBPFCgroupID          = flag.Bool("enable-cgroup-id", true, "whether enable eBPF to collect cgroup id (must have kernel version >= 4.18 and cGroup v2)")
@@ -86,6 +88,7 @@ func main() {
 
 	config.SetEnabledEBPFCgroupID(*enabledEBPFCgroupID)
 	config.SetEnabledHardwareCounterMetrics(*exposeHardwareCounterMetrics)
+	config.SetEnabledDummy(*enableDummy)
 	config.SetEnabledGPU(*enableGPU)
 	config.SetEnabledQAT(*enableQAT)
 	config.EnabledMSR = *enabledMSR
@@ -112,22 +115,32 @@ func main() {
 
 	stats.InitAvailableParamAndMetrics()
 
-	if config.EnabledGPU {
-		klog.Infof("Initializing the GPU collector")
-		// the GPU operators typically takes longer time to initialize than kepler resulting in error to start the gpu driver
-		// therefore, we wait up to 1 min to allow the gpu operator initialize
-		for i := 0; i <= maxGPUInitRetry; i++ {
-			err = gpu.Init()
-			if err == nil {
-				break
-			} else {
-				time.Sleep(6 * time.Second)
+	if config.EnabledDummy || config.EnabledGPU { //TODO UPDATE THIS LATER
+		if len(device.GetAcceleratorInterfaces()) != 0 {
+			klog.Infof("Initializing the Accelerator collectors in %v", device.GetAcceleratorInterfaces())
+			var err error
+			var a acc.Accelerator
+
+			for _, accName := range device.GetAcceleratorInterfaces() {
+				for i := 0; i <= maxDeviceInitRetry; i++ {
+					if a = acc.NewAccelerator(accName); a == nil {
+						klog.Error("Could not init the Accelerator going to try again")
+						// The GPU operators typically takes longer time to initialize than kepler resulting in error to start the gpu driver
+						// therefore, we wait up to 1 min to allow the gpu operator initialize
+						time.Sleep(6 * time.Second)
+						continue
+					}
+					if err = a.StartupAccelerator(); err != nil {
+						klog.Errorf("Could not Startup the Accelerator")
+						break
+					}
+					defer a.StopAccelerator()
+					klog.Infof("StartupAccelerator successful")
+					break
+				}
 			}
-		}
-		if err == nil {
-			defer gpu.Shutdown()
 		} else {
-			klog.Infof("Failed to initialize the GPU collector: %v. Have the GPU operator initialize?", err)
+			klog.Errorf("No accelerator collectors found")
 		}
 	}
 
