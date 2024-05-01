@@ -32,8 +32,7 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/collector/stats"
 	"github.com/sustainable-computing-io/kepler/pkg/config"
 	"github.com/sustainable-computing-io/kepler/pkg/model"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/qat"
+	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator"
 	"github.com/sustainable-computing-io/kepler/pkg/utils"
 
 	"k8s.io/klog/v2"
@@ -180,8 +179,10 @@ func (c *Collector) updateNodeAvgCPUFrequencyFromEBPF() {
 // update the node metrics that are not related to aggregated resource utilization of processes
 func (c *Collector) updateNodeResourceUtilizationMetrics(wg *sync.WaitGroup) {
 	defer wg.Done()
-	if config.IsExposeQATMetricsEnabled() && qat.IsQATCollectionSupported() {
-		accelerator.UpdateNodeQATMetrics(stats.NewNodeStats(c.bpfSupportedMetrics))
+	if config.IsExposeQATMetricsEnabled() {
+		if _, err := acc.GetActiveAcceleratorsByType("qat"); err == nil {
+			accelerator.UpdateNodeQATMetrics(stats.NewNodeStats(c.bpfSupportedMetrics))
+		}
 	}
 	if config.ExposeCPUFrequencyMetrics {
 		c.updateNodeAvgCPUFrequencyFromEBPF()
@@ -193,8 +194,10 @@ func (c *Collector) updateProcessResourceUtilizationMetrics(wg *sync.WaitGroup) 
 	// update process metrics regarding the resource utilization to be used to calculate the energy consumption
 	// we first updates the bpf which is resposible to include new processes in the ProcessStats collection
 	resourceBpf.UpdateProcessBPFMetrics(c.bpfExporter, c.ProcessStats)
-	if config.EnabledGPU && gpu.IsGPUCollectionSupported() {
-		accelerator.UpdateProcessGPUUtilizationMetrics(c.ProcessStats, c.bpfSupportedMetrics)
+	if config.EnabledGPU {
+		if _, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+			accelerator.UpdateProcessGPUUtilizationMetrics(c.ProcessStats, c.bpfSupportedMetrics)
+		}
 	}
 }
 

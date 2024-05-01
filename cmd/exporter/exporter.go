@@ -28,8 +28,7 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/collector/stats"
 	"github.com/sustainable-computing-io/kepler/pkg/config"
 	"github.com/sustainable-computing-io/kepler/pkg/manager"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/gpu"
-	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/qat"
+	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/components"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/platform"
 	kversion "github.com/sustainable-computing-io/kepler/pkg/version"
@@ -41,9 +40,8 @@ import (
 
 const (
 	// to change these msg, you also need to update the e2e test
-	finishingMsg    = "Exiting..."
-	startedMsg      = "Started Kepler in %s"
-	maxGPUInitRetry = 10
+	finishingMsg = "Exiting..."
+	startedMsg   = "Started Kepler in %s"
 )
 
 var (
@@ -69,6 +67,20 @@ func healthProbe(w http.ResponseWriter, req *http.Request) {
 }
 
 func finalizing() {
+	if config.EnabledGPU {
+		if gpus, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+			for _, a := range gpus {
+				a.StopAccelerator()
+			}
+		}
+	}
+	if config.EnabledQAT {
+		if qats, err := acc.GetActiveAcceleratorsByType("qat"); err == nil {
+			for _, a := range qats {
+				a.StopAccelerator()
+			}
+		}
+	}
 	stack := "exit stack: \n" + string(debug.Stack())
 	klog.Infof(stack)
 	exitCode := 10
@@ -113,30 +125,14 @@ func main() {
 	stats.InitAvailableParamAndMetrics()
 
 	if config.EnabledGPU {
-		klog.Infof("Initializing the GPU collector")
-		// the GPU operators typically takes longer time to initialize than kepler resulting in error to start the gpu driver
-		// therefore, we wait up to 1 min to allow the gpu operator initialize
-		for i := 0; i <= maxGPUInitRetry; i++ {
-			err = gpu.Init()
-			if err == nil {
-				break
-			} else {
-				time.Sleep(6 * time.Second)
-			}
-		}
-		if err == nil {
-			defer gpu.Shutdown()
-		} else {
-			klog.Infof("Failed to initialize the GPU collector: %v. Have the GPU operator initialize?", err)
+		if err := acc.InitAcc("gpu", true); err != nil {
+			klog.Fatalf("failed to init GPU accelerators: %v", err)
 		}
 	}
 
 	if config.IsExposeQATMetricsEnabled() {
-		klog.Infof("Initializing the QAT collector")
-		if qatErr := qat.Init(); qatErr == nil {
-			defer qat.Shutdown()
-		} else {
-			klog.Infof("Failed to initialize the QAT collector: %v", qatErr)
+		if err := acc.InitAcc("qat", false); err != nil {
+			klog.Fatalf("failed to init QAT accelerators: %v", err)
 		}
 	}
 

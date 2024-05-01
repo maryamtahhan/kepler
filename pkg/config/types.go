@@ -56,7 +56,7 @@ const (
 	// system
 	CPUFrequency = "avg_cpu_frequency"
 
-	// NVIDIA GPU
+	// GPU
 	GPUComputeUtilization = "gpu_compute_util"
 	GPUMemUtilization     = "gpu_mem_util"
 
