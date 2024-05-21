@@ -1,6 +1,3 @@
-//go:build habana
-// +build habana
-
 /*
 Copyright 2024.
 
@@ -29,10 +26,13 @@ import (
 	"github.com/sustainable-computing-io/kepler/pkg/config"
 )
 
+const (
+	habanaDevice = "habana"
+	habanaHwType = "gpu"
+)
+
 var (
-	acceleratorImpl = GPUHabana{}
-	deviceType      = "habana"
-	hwType          = "gpu"
+	habanaAccImpl = GPUHabana{}
 )
 
 type GPUHabana struct {
@@ -41,23 +41,23 @@ type GPUHabana struct {
 }
 
 func init() {
-	err := acceleratorImpl.InitLib()
+	err := habanaAccImpl.InitLib()
 	if err == nil {
-		klog.Infof("Using %s to obtain processor power", acceleratorImpl.GetName())
-		dev.AddDeviceInterface(deviceType, habanaDeviceStartup)
+		klog.Infof("Using %s to obtain processor power", habanaAccImpl.GetName())
+		dev.AddDeviceInterface(habanaDevice, habanaDeviceStartup)
 		return
 	} else {
-		klog.Infof("Error initializing %s: %v", acceleratorImpl.GetName(), err)
+		klog.Infof("Error initializing %s: %v", habanaAccImpl.GetName(), err)
 	}
 }
 
 func habanaDeviceStartup(dType string) (dev.AcceleratorInterface, error) {
 
-	if dType != deviceType {
+	if dType != habanaDevice {
 		return nil, errors.New("invalid device type")
 	}
 
-	a := acceleratorImpl
+	a := habanaAccImpl
 
 	if err := a.Init(); err != nil {
 		klog.Errorf("failed to StartupDevice: %v", err)
@@ -68,15 +68,15 @@ func habanaDeviceStartup(dType string) (dev.AcceleratorInterface, error) {
 }
 
 func (g *GPUHabana) GetName() string {
-	return deviceType
+	return habanaDevice
 }
 
 func (g *GPUHabana) GetType() string {
-	return deviceType
+	return habanaDevice
 }
 
 func (g *GPUHabana) GetHwType() string {
-	return hwType
+	return habanaHwType
 }
 
 func (g *GPUHabana) InitLib() error {
@@ -105,6 +105,7 @@ func (g *GPUHabana) Shutdown() bool {
 
 func (g *GPUHabana) GetAbsEnergyFromDevice() []uint32 {
 	gpuEnergy := []uint32{}
+
 	for _, device := range g.devices {
 		power, ret := device.DeviceHandler.(hlml.Device).PowerUsage()
 		if ret != nil {

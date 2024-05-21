@@ -1,6 +1,3 @@
-//go:build dcgm
-// +build dcgm
-
 /*
 Copyright 2024.
 
@@ -35,14 +32,13 @@ const (
 	debugLevel     = 5
 	isSocket       = "0"
 	maxMIGProfiles = 15 // use a large number since the profile ids are not linear
-
+	dcgmDevice     = "dcgm"
+	dcgmHwType     = "gpu"
 )
 
 var (
-	deviceType                   = "dcgm"
-	hwType                       = "gpu"
-	acceleratorImpl              = GPUDcgm{}
-	deviceFields    []dcgm.Short = []dcgm.Short{
+	dcgmAccImpl               = GPUDcgm{}
+	deviceFields []dcgm.Short = []dcgm.Short{
 		// https://docs.nvidia.com/datacenter/dcgm/1.7/dcgm-api/group__dcgmFieldIdentifiers.htm
 		dcgm.DCGM_FI_PROF_PIPE_TENSOR_ACTIVE,
 	}
@@ -63,23 +59,23 @@ type GPUDcgm struct {
 }
 
 func init() {
-	err := acceleratorImpl.InitLib()
+	err := dcgmAccImpl.InitLib()
 	if err == nil {
-		klog.Infof("Using %s to obtain gpu power", acceleratorImpl.GetName())
-		dev.AddDeviceInterface(deviceType, dcgmDeviceStartup)
+		klog.Infof("Using %s to obtain gpu power", dcgmAccImpl.GetName())
+		dev.AddDeviceInterface(dcgmDevice, dcgmDeviceStartup)
 		return
 	} else {
-		klog.Infof("Error initializing %s: %v", acceleratorImpl.GetName(), err)
+		klog.Infof("Error initializing %s: %v", dcgmAccImpl.GetName(), err)
 	}
 }
 
 func dcgmDeviceStartup(dType string) (dev.AcceleratorInterface, error) {
 
-	if dType != deviceType {
+	if dType != dcgmDevice {
 		return nil, errors.New("invalid device type")
 	}
 
-	a := acceleratorImpl
+	a := dcgmAccImpl
 
 	if err := a.Init(); err != nil {
 		klog.Errorf("failed to StartupDevice: %v", err)
@@ -255,15 +251,15 @@ func (d *GPUDcgm) loadMIGProfiles() {
 }
 
 func (d *GPUDcgm) GetName() string {
-	return deviceType
+	return dcgmDevice
 }
 
 func (d *GPUDcgm) GetType() string {
-	return deviceType
+	return dcgmDevice
 }
 
 func (d *GPUDcgm) GetHwType() string {
-	return hwType
+	return dcgmHwType
 }
 
 func (d *GPUDcgm) IsDeviceCollectionSupported() bool {

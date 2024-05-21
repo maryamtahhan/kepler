@@ -1,6 +1,3 @@
-//go:build dummy
-// +build dummy
-
 /*
 Copyright 2024.
 
@@ -25,29 +22,29 @@ import (
 	acc "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device"
 )
 
-const (
-	deviceType = "dummy"
+var (
+	dummyDevice = "dummy"
 )
 
 type Dummy struct {
-	deviceType          string
+	dummyDevice         string
 	name                string
 	collectionSupported bool
 }
 
 func init() {
-	acc.AddDeviceInterface(deviceType, dummyDeviceStartup)
+	acc.AddDeviceInterface(dummyDevice, dummyDeviceStartup)
 }
 
 func dummyDeviceStartup(dType string) (acc.AcceleratorInterface, error) {
 
-	if dType != deviceType {
+	if dType != dummyDevice {
 		return nil, errors.New("invalid device type")
 	}
 
 	d := Dummy{
-		deviceType:          deviceType,
-		name:                "dummy",
+		dummyDevice:         dummyDevice,
+		name:                dummyDevice,
 		collectionSupported: false,
 	}
 
@@ -59,11 +56,11 @@ func (d *Dummy) GetName() string {
 }
 
 func (d *Dummy) GetType() string {
-	return d.deviceType
+	return d.dummyDevice
 }
 
 func (d *Dummy) GetHwType() string {
-	return d.deviceType
+	return d.dummyDevice
 }
 
 func (d *Dummy) InitLib() error {

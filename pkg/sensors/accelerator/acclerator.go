@@ -18,6 +18,8 @@ package accelerator
 
 //nolint:gci // The supported gpu imports are kept separate.
 import (
+	"sync"
+
 	"golang.org/x/exp/slices"
 
 	"github.com/pkg/errors"
@@ -48,6 +50,7 @@ type Accelerator interface {
 }
 
 type accelerator struct {
+	sync.Mutex                             // Don't think we need this mutex, only the exporter is doing ops here
 	acc           dev.AcceleratorInterface // Device Accelerator Interface
 	accType       string                   // NVML|DCGM|Dummy
 	running       bool
@@ -58,7 +61,7 @@ func GetAccelerators() map[string]Accelerator {
 	return accelerators
 }
 
-// NewAccelerator creates a new Accelerator instance [NVML|DCGM|DUMMY] for the local node.
+// NewAccelerator creates a new Accelerator instance [NVML|DCGM|DUMMY|HABANA] for the local node.
 func NewAccelerator(accType string) Accelerator {
 
 	containsType := slices.Contains(dev.GetAcceleratorInterfaces(), accType)
@@ -88,6 +91,10 @@ func NewAccelerator(accType string) Accelerator {
 // StartupAccelerator of a particular type
 func (a *accelerator) StartupAccelerator() error {
 	var err error
+
+	a.Lock()
+	defer a.Unlock()
+
 	if a.acc, err = dev.StartupDevice(a.accType); err != nil {
 		return errors.Wrap(err, "error creating the acc")
 	}
@@ -101,6 +108,9 @@ func (a *accelerator) StartupAccelerator() error {
 }
 
 func (a *accelerator) StopAccelerator() error {
+	a.Lock()
+	defer a.Unlock()
+
 	if a.acc.Shutdown() != true {
 		return errors.New("error shutting down the accelerator acc")
 	}
@@ -115,13 +125,22 @@ func (a *accelerator) StopAccelerator() error {
 }
 
 func (a *accelerator) GetAcceleratorType() string {
+	a.Lock()
+	defer a.Unlock()
+
 	return a.accType
 }
 
 func (a *accelerator) IsRunning() bool {
-	return a.IsRunning()
+	a.Lock()
+	defer a.Unlock()
+
+	return a.running
 }
 
 func (a *accelerator) GetAccelerator() dev.AcceleratorInterface {
+	a.Lock()
+	defer a.Unlock()
+
 	return a.acc
 }

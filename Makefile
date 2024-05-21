@@ -50,17 +50,7 @@ else
 	GC_FLAGS =
 endif
 
-ACC_TAGS := ' dummy '
 GENERAL_TAGS := 'include_gcs include_oss containers_image_openpgp gssapi providerless netgo osusergo libbpf '
-ifeq ($(shell ldconfig -p | grep -q libnvidia-ml.so && echo exists),exists)
-	ACC_TAGS := ' nvml '
-endif
-ifeq ($(shell ldconfig -p | grep -q libdcgm.so && echo exists),exists)
-	ACC_TAGS := ' dcgm '
-endif
-ifeq ($(shell ldconfig -p | grep -q libhlml.so && echo exists),exists)
-	ACC_TAGS := ' habana '
-endif
 
 GO_LD_FLAGS := $(GC_FLAGS) -ldflags "-X $(LD_FLAGS)" $(CFLAGS)
 
@@ -74,7 +64,7 @@ GOENV = GO111MODULE="" GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=1 CC=clang CGO_
 
 DOCKERFILE := $(SRC_ROOT)/build/Dockerfile
 IMAGE_BUILD_TAG := $(GIT_VERSION)-linux-$(GOARCH)
-GO_BUILD_TAGS := $(GENERAL_TAGS)$(GOOS)$(ACC_TAGS)
+GO_BUILD_TAGS := $(GENERAL_TAGS)$(GOOS)
 GO_TEST_TAGS := $(GENERAL_TAGS)$(GOOS)
 
 # for testsuite
