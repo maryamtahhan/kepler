@@ -1,3 +1,6 @@
+//go:build habana
+// +build habana
+
 /*
 Copyright 2024.
 
@@ -41,17 +44,14 @@ type GPUHabana struct {
 }
 
 func init() {
-	err := habanaAccImpl.InitLib()
-	if err == nil {
-		klog.Infof("Using %s to obtain processor power", habanaAccImpl.GetName())
-		dev.AddDeviceInterface(habanaDevice, habanaDeviceStartup)
-		return
-	} else {
+	if err := habanaAccImpl.InitLib(); err != nil {
 		klog.Infof("Error initializing %s: %v", habanaAccImpl.GetName(), err)
 	}
+	klog.Infof("Using %s to obtain processor power", habanaAccImpl.GetName())
+	dev.AddDeviceInterface(habanaDevice, habanaHwType, habanaDeviceStartup)
 }
 
-func habanaDeviceStartup(dType string) (dev.AcceleratorInterface, error) {
+func habanaDeviceStartup() (dev.AcceleratorInterface, error) {
 
 	if dType != habanaDevice {
 		return nil, errors.New("invalid device type")

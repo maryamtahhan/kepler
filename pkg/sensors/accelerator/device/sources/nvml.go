@@ -16,7 +16,6 @@ limitations under the License.
 package sources
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -44,23 +43,20 @@ type GPUNvml struct {
 }
 
 func init() {
-	err := nvmlAccImpl.InitLib()
-	if err == nil {
-		klog.Infof("Using %s to obtain gpu power", nvmlAccImpl.GetName())
-		dev.AddDeviceInterface(nvmlDevice, nvmlDeviceStartup)
+	if err := nvml.Init(); err != nvml.SUCCESS {
+		klog.Errorf("Error initializing nvml: %v", err)
 		return
-	} else {
-		klog.Infof("Error initializing %s: %v", nvmlAccImpl.GetName(), err)
 	}
+	klog.Info("Initializing nvml Successful")
+	dev.AddDeviceInterface(nvmlDevice, nvmlHwType, nvmlDeviceStartup)
 }
 
-func nvmlDeviceStartup(dType string) (dev.AcceleratorInterface, error) {
-
-	if dType != nvmlDevice {
-		return nil, errors.New("invalid device type")
-	}
-
+func nvmlDeviceStartup() (dev.AcceleratorInterface, error) {
 	a := nvmlAccImpl
+	if err := a.InitLib(); err != nil {
+		klog.Errorf("Error initializing %s: %v", nvmlDevice, err)
+	}
+	klog.Infof("Using %s to obtain gpu power", nvmlDevice)
 
 	if err := a.Init(); err != nil {
 		klog.Errorf("failed to Init device: %v", err)

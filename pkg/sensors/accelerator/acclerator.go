@@ -52,7 +52,7 @@ type Accelerator interface {
 type accelerator struct {
 	sync.Mutex                             // Don't think we need this mutex, only the exporter is doing ops here
 	acc           dev.AcceleratorInterface // Device Accelerator Interface
-	accType       string                   // NVML|DCGM|Dummy
+	accType       string                   // NVML|DCGM|Habana|Dummy
 	running       bool
 	installedtime metav1.Time
 }
@@ -64,7 +64,7 @@ func GetAccelerators() map[string]Accelerator {
 // NewAccelerator creates a new Accelerator instance [NVML|DCGM|DUMMY|HABANA] for the local node.
 func NewAccelerator(accType string) Accelerator {
 
-	containsType := slices.Contains(dev.GetAcceleratorInterfaces(), accType)
+	containsType := slices.Contains(dev.GetAllDevices(), accType)
 	if !containsType {
 		klog.Error("Invalid Device Type")
 		return nil

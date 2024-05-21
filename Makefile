@@ -51,7 +51,10 @@ else
 endif
 
 GENERAL_TAGS := 'include_gcs include_oss containers_image_openpgp gssapi providerless netgo osusergo libbpf '
-
+GPU_TAGS := ''
+ifeq ($(shell ldconfig -p | grep -q libhlml.so && echo exists),exists)
+	GPU_TAGS := ' habana '
+endif
 GO_LD_FLAGS := $(GC_FLAGS) -ldflags "-X $(LD_FLAGS)" $(CFLAGS)
 
 # set GOENV
@@ -64,7 +67,7 @@ GOENV = GO111MODULE="" GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=1 CC=clang CGO_
 
 DOCKERFILE := $(SRC_ROOT)/build/Dockerfile
 IMAGE_BUILD_TAG := $(GIT_VERSION)-linux-$(GOARCH)
-GO_BUILD_TAGS := $(GENERAL_TAGS)$(GOOS)
+GO_BUILD_TAGS := $(GENERAL_TAGS)$(GOOS)$(GPU_TAGS)
 GO_TEST_TAGS := $(GENERAL_TAGS)$(GOOS)
 
 # for testsuite

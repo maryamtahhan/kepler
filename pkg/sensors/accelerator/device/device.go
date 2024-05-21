@@ -17,12 +17,17 @@ limitations under the License.
 package device
 
 import (
-	"fmt"
-	"strings"
+	"errors"
 	"time"
 
 	"golang.org/x/exp/maps"
 	"k8s.io/klog/v2"
+)
+
+var (
+	gpuDevices   = map[string]deviceStartupFunc{} // Static map of supported gpuDevices.
+	dummyDevices = map[string]deviceStartupFunc{} // Static map of supported dummyDevices.
+	// CryptoInterfaces = map[string]deviceStartupFunc{} // Static map of supported cryptoInterfaces.
 )
 
 type ProcessUtilizationSample struct {
@@ -71,46 +76,71 @@ type AcceleratorInterface interface {
 }
 
 // Function prototype to create a new deviceCollector.
-type deviceStartupFunc func(accType string) (AcceleratorInterface, error)
-
-// Static map of supported acceleratorInterface.
-var acceleratorInterfaces = map[string]deviceStartupFunc{}
+type deviceStartupFunc func() (AcceleratorInterface, error)
 
 // Adds a supported device interface, prints a fatal error in the case of double registration.
-func AddDeviceInterface(name string, deviceStartup deviceStartupFunc) {
-	if acceleratorInterfaces[name] != nil {
-		klog.Fatalf("Multiple AcceleratorInterfaces attempting to register with name %q", name)
+func AddDeviceInterface(name, dtype string, deviceStartup deviceStartupFunc) {
+	switch dtype {
+	case "gpu":
+		if gpuDevices[name] != nil {
+			klog.Fatalf("Multiple gpuDevices attempting to register with name %q", name)
+		} else {
+			switch name {
+			case "nvml":
+				if _, ok := gpuDevices["dcgm"]; ok {
+					// dcgm already initialized successfully then don't register nvml
+					return
+				}
+			case "dcgm":
+				// nvml already initialized successfully then remove it as dcgm is proiritized in this case
+				delete(gpuDevices, "nvml")
+			}
+			gpuDevices[name] = deviceStartup
+		}
+	case "dummy":
+		if dummyDevices[name] != nil {
+			klog.Fatalf("Multiple dummyDevices attempting to register with name %q", name)
+		} else {
+			dummyDevices[name] = deviceStartup
+		}
 	}
 
 	klog.Infof("Registered %s", name)
-
-	acceleratorInterfaces[name] = deviceStartup
 }
 
-func GetAcceleratorInterfaces() []string {
-	// TODO check the len of acceleratorInterfaces
-	return maps.Keys(acceleratorInterfaces)
+func GetAllDevices() []string {
+	devices := append(append([]string{}, maps.Keys(gpuDevices)...), maps.Keys(gpuDevices)...)
+	return devices
 }
 
-// StartupDevice Returns a new AcceleratorInterface according the required accType[nvml|dcgm|dummy|habana].
-func StartupDevice(accType string) (AcceleratorInterface, error) {
-	// We'll panic if accType are nil, this is intentional
-	deviceStartup, ok := acceleratorInterfaces[accType]
-	if !ok {
-		var deviceList strings.Builder
-
-		for d := range acceleratorInterfaces {
-			if deviceList.Len() > 0 {
-				deviceList.WriteString(", ")
-			}
-
-			deviceList.WriteString(d)
-		}
-
-		return nil, fmt.Errorf("unsupported device Type %s; supported accTypes: %s", accType, deviceList.String())
+func GetDeviceType(name string) string {
+	if _, ok := gpuDevices[name]; ok {
+		return "gpu"
+	} else if _, ok := dummyDevices[name]; ok {
+		return "dummy"
 	}
 
-	klog.Infof("Starting up %s", accType)
+	return ""
+}
 
-	return deviceStartup(accType)
+func GetGpuDevices() []string {
+	return maps.Keys(gpuDevices)
+}
+
+func GetDummyDevices() []string {
+	return maps.Keys(dummyDevices)
+}
+
+// StartupGPUDevice Returns a new AcceleratorInterface according the required name[nvml|dcgm|dummy|habana].
+func StartupDevice(name string) (AcceleratorInterface, error) {
+
+	if deviceStartup, ok := gpuDevices[name]; ok {
+		klog.Infof("Starting up %s", name)
+		return deviceStartup()
+	} else if deviceStartup, ok := dummyDevices[name]; ok {
+		klog.Infof("Starting up %s", name)
+		return deviceStartup()
+	}
+
+	return nil, errors.New("unsupported Device")
 }

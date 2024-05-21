@@ -1,3 +1,6 @@
+//go:build dummy
+// +build dummy
+
 /*
 Copyright 2024.
 

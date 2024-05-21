@@ -17,7 +17,6 @@ limitations under the License.
 package sources
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -59,23 +58,22 @@ type GPUDcgm struct {
 }
 
 func init() {
-	err := dcgmAccImpl.InitLib()
-	if err == nil {
-		klog.Infof("Using %s to obtain gpu power", dcgmAccImpl.GetName())
-		dev.AddDeviceInterface(dcgmDevice, dcgmDeviceStartup)
+
+	if _, err := dcgm.Init(dcgm.Standalone, config.DCGMHostEngineEndpoint, isSocket); err != nil {
+		klog.Errorf("Error initializing dcgm: %v", err)
 		return
-	} else {
-		klog.Infof("Error initializing %s: %v", dcgmAccImpl.GetName(), err)
 	}
+	klog.Info("Initializing dcgm Successful")
+	dev.AddDeviceInterface(dcgmDevice, dcgmHwType, dcgmDeviceStartup)
 }
 
-func dcgmDeviceStartup(dType string) (dev.AcceleratorInterface, error) {
-
-	if dType != dcgmDevice {
-		return nil, errors.New("invalid device type")
-	}
-
+func dcgmDeviceStartup() (dev.AcceleratorInterface, error) {
 	a := dcgmAccImpl
+
+	if err := a.InitLib(); err != nil {
+		klog.Errorf("Error initializing %s: %v", dcgmDevice, err)
+	}
+	klog.Infof("Using %s to obtain gpu power", dcgmDevice)
 
 	if err := a.Init(); err != nil {
 		klog.Errorf("failed to StartupDevice: %v", err)
@@ -120,23 +118,28 @@ func (d *GPUDcgm) Init() error {
 	return nil
 }
 
-func (d *GPUDcgm) InitLib() error {
-	d.devices = make(map[int]dev.Device)
-
+func (d *GPUDcgm) InitLib() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("could not init dcgm: %v", r)
+		}
+	}()
 	cleanup, err := dcgm.Init(dcgm.Standalone, config.DCGMHostEngineEndpoint, isSocket)
 	if err != nil {
-		klog.Warningf("There is no DCGM daemon running in the host: %s", err)
+		klog.Infof("There is no DCGM daemon running in the host: %s", err)
 		// embedded mode is not recommended for production per https://github.com/NVIDIA/dcgm-exporter/issues/22#issuecomment-1321521995
 		cleanup, err = dcgm.Init(dcgm.Embedded)
 		if err != nil {
-			klog.Warningf("Could not start DCGM. Error: %s", err)
+			klog.Infof("Could not start DCGM. Error: %s", err)
 			if cleanup != nil {
 				cleanup()
 			}
 			return fmt.Errorf("not able to connect to DCGM: %s", err)
 		}
-		klog.V(1).Info("Started DCGM in the Embedded mode ")
+		klog.Info("Started DCGM in the Embedded mode ")
 	}
+
+	d.devices = make(map[int]dev.Device)
 	d.cleanup = cleanup
 	dcgm.FieldsInit()
 

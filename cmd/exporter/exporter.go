@@ -50,7 +50,6 @@ const (
 var (
 	address                      = flag.String("address", "0.0.0.0:8888", "bind address")
 	metricsPath                  = flag.String("metrics-path", "/metrics", "metrics path")
-	enableDummy                  = flag.Bool("enable-dummy", false, "Dummy trial") //TODO FOR TESTING ONLY
 	enableGPU                    = flag.Bool("enable-gpu", false, "whether enable gpu (need to have libnvidia-ml installed)")
 	enableQAT                    = flag.Bool("enable-qat", false, "whether enable qat (need to have Intel QAT driver installed)")
 	enabledEBPFCgroupID          = flag.Bool("enable-cgroup-id", true, "whether enable eBPF to collect cgroup id (must have kernel version >= 4.18 and cGroup v2)")
@@ -88,7 +87,6 @@ func main() {
 
 	config.SetEnabledEBPFCgroupID(*enabledEBPFCgroupID)
 	config.SetEnabledHardwareCounterMetrics(*exposeHardwareCounterMetrics)
-	config.SetEnabledDummy(*enableDummy)
 	config.SetEnabledGPU(*enableGPU)
 	config.SetEnabledQAT(*enableQAT)
 	config.EnabledMSR = *enabledMSR
@@ -115,13 +113,15 @@ func main() {
 
 	stats.InitAvailableParamAndMetrics()
 
-	if config.EnabledDummy || config.EnabledGPU { //TODO UPDATE THIS LATER
-		if len(device.GetAcceleratorInterfaces()) != 0 {
-			klog.Infof("Initializing the Accelerator collectors in %v", device.GetAcceleratorInterfaces())
+	if config.EnabledGPU {
+		if len(device.GetGpuDevices()) == 0 {
+			klog.Error("No GPU Accelerator collectors found")
+		} else {
+			klog.Infof("Initializing the GPU Accelerator collectors in %v", device.GetGpuDevices())
 			var err error
 			var a acc.Accelerator
 
-			for _, accName := range device.GetAcceleratorInterfaces() {
+			for _, accName := range device.GetGpuDevices() {
 				for i := 0; i <= maxDeviceInitRetry; i++ {
 					if a = acc.NewAccelerator(accName); a == nil {
 						klog.Error("Could not init the Accelerator going to try again")
@@ -139,8 +139,6 @@ func main() {
 					break
 				}
 			}
-		} else {
-			klog.Errorf("No accelerator collectors found")
 		}
 	}
 
