@@ -74,13 +74,10 @@ func NewStats(bpfSupportedMetrics bpf.SupportedMetrics) *Stats {
 	}
 
 	if config.EnabledGPU {
-		for _, a := range acc.GetAccelerators() {
-			d := a.GetAccelerator()
-			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
-				m.ResourceUsage[config.GPUComputeUtilization] = types.NewUInt64StatCollection()
-				m.ResourceUsage[config.GPUMemUtilization] = types.NewUInt64StatCollection()
-				m.ResourceUsage[config.IdleEnergyInGPU] = types.NewUInt64StatCollection()
-			}
+		if _, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+			m.ResourceUsage[config.GPUComputeUtilization] = types.NewUInt64StatCollection()
+			m.ResourceUsage[config.GPUMemUtilization] = types.NewUInt64StatCollection()
+			m.ResourceUsage[config.IdleEnergyInGPU] = types.NewUInt64StatCollection()
 		}
 	}
 
@@ -143,15 +140,11 @@ func (m *Stats) UpdateDynEnergy() {
 	}
 	// gpu metric
 	if config.EnabledGPU {
-		for _, a := range acc.GetAccelerators() {
-			d := a.GetAccelerator()
-			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
-				for gpuID := range m.EnergyUsage[config.AbsEnergyInGPU].Stat {
-					m.CalcDynEnergy(config.AbsEnergyInGPU, config.IdleEnergyInGPU, config.DynEnergyInGPU, gpuID)
-				}
+		if _, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+			for gpuID := range m.EnergyUsage[config.AbsEnergyInGPU].Stat {
+				m.CalcDynEnergy(config.AbsEnergyInGPU, config.IdleEnergyInGPU, config.DynEnergyInGPU, gpuID)
 			}
 		}
-
 	}
 }
 

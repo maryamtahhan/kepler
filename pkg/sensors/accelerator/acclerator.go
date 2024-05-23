@@ -57,8 +57,25 @@ type accelerator struct {
 	installedtime metav1.Time
 }
 
-func GetAccelerators() map[string]Accelerator {
-	return accelerators
+func GetAccelerators() (map[string]Accelerator, error) {
+	if len(accelerators) == 0 {
+		return nil, errors.New("no accelerators found")
+	}
+	return accelerators, nil
+}
+
+func GetActiveAcceleratorsByType(t string) (map[string]Accelerator, error) {
+	accs := map[string]Accelerator{}
+	for _, a := range accelerators {
+		d := a.GetAccelerator()
+		if d.GetHwType() == t && d.IsDeviceCollectionSupported() {
+			accs[a.GetAcceleratorType()] = a
+		}
+	}
+	if len(accs) == 0 {
+		return nil, errors.New("accelerators not found")
+	}
+	return accs, nil
 }
 
 // NewAccelerator creates a new Accelerator instance [NVML|DCGM|DUMMY|HABANA] for the local node.

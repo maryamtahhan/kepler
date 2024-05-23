@@ -36,10 +36,9 @@ func EnergyMetricsPromDesc(context string) (descriptions map[string]*prometheus.
 		// set the default source to trained power model
 		source := modeltypes.TrainedPowerModelSource
 		if strings.Contains(name, config.GPU) {
-			for _, a := range acc.GetAccelerators() {
-				d := a.GetAccelerator()
-				if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() { //TODO update this it assumes just one at a time
-					source = d.GetName()
+			if gpus, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+				for _, a := range gpus {
+					source = a.GetAccelerator().GetName()
 				}
 			}
 		} else if strings.Contains(name, config.PLATFORM) && platform.IsSystemCollectionSupported() {
@@ -118,11 +117,10 @@ func NodeCPUFrequencyMetricsPromDesc(context string) (descriptions map[string]*p
 func GPUUsageMetricsPromDesc(context string) (descriptions map[string]*prometheus.Desc) {
 	descriptions = make(map[string]*prometheus.Desc)
 	if config.EnabledGPU {
-		for _, a := range acc.GetAccelerators() {
-			d := a.GetAccelerator()
-			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
+		if gpus, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+			for _, g := range gpus {
 				for _, name := range consts.GPUMetricNames {
-					descriptions[name] = resMetricsPromDesc(context, name, "nvidia-nvml")
+					descriptions[name] = resMetricsPromDesc(context, name, g.GetAccelerator().GetName())
 				}
 			}
 		}

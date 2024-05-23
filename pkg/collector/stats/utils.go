@@ -87,13 +87,10 @@ func GetProcessFeatureNames(bpfSupportedMetrics bpf.SupportedMetrics) []string {
 
 	// gpu metric
 	if config.EnabledGPU {
-		for _, a := range acc.GetAccelerators() {
-			d := a.GetAccelerator()
-			if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
-				gpuMetrics := []string{config.GPUComputeUtilization, config.GPUMemUtilization}
-				metrics = append(metrics, gpuMetrics...)
-				klog.V(3).Infof("Available GPU metrics: %v", gpuMetrics)
-			}
+		if _, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+			gpuMetrics := []string{config.GPUComputeUtilization, config.GPUMemUtilization}
+			metrics = append(metrics, gpuMetrics...)
+			klog.V(3).Infof("Available GPU metrics: %v", gpuMetrics)
 		}
 	}
 

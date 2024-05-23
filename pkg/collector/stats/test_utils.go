@@ -32,13 +32,13 @@ const (
 // SetMockedCollectorMetrics adds all metric to a process, otherwise it will not create the right usageMetric with all elements. The usageMetric is used in the Prediction Power Models
 // TODO: do not use a fixed usageMetric array in the power models, a structured data is more disarable.
 func SetMockedCollectorMetrics() {
-	for _, a := range acc.GetAccelerators() {
-		d := a.GetAccelerator()
-		if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
-			err := d.Init() // create structure instances that will be accessed to create a processMetric
+	if gpus, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+		for _, a := range gpus {
+			err := a.GetAccelerator().Init() // create structure instances that will be accessed to create a processMetric
 			klog.Fatalln(err)
 		}
 	}
+
 	// initialize the Available metrics since they are used to create a new processMetrics instance
 	AvailableCGroupMetrics = []string{
 		config.CgroupfsMemory,

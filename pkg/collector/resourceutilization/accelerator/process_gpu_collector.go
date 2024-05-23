@@ -45,9 +45,9 @@ var (
 
 // UpdateProcessGPUUtilizationMetrics reads the GPU metrics of each process using the GPU
 func UpdateProcessGPUUtilizationMetrics(processStats map[uint64]*stats.ProcessStats, bpfSupportedMetrics bpf.SupportedMetrics) {
-	for _, a := range acc.GetAccelerators() {
-		d := a.GetAccelerator()
-		if d.GetHwType() == "gpu" && d.IsDeviceCollectionSupported() {
+	if gpus, err := acc.GetActiveAcceleratorsByType("gpu"); err == nil {
+		for _, a := range gpus {
+			d := a.GetAccelerator()
 			migDevices := d.GetDeviceInstances()
 			for _, _device := range d.GetDevices() {
 				// we need to use MIG device handler if the GPU has MIG slices, otherwise, we use the GPU device handler
@@ -62,6 +62,7 @@ func UpdateProcessGPUUtilizationMetrics(processStats map[uint64]*stats.ProcessSt
 					}
 				}
 			}
+
 		}
 	}
 	lastUtilizationTimestamp = time.Now()
