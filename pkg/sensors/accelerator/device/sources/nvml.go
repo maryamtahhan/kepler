@@ -60,6 +60,7 @@ func nvmlDeviceStartup() (_dev.AcceleratorInterface, error) {
 	a := nvmlAccImpl
 	if err := a.InitLib(); err != nil {
 		klog.Errorf("Error initializing %s: %v", nvmlDevice, err)
+		return nil, err
 	}
 	klog.Infof("Using %s to obtain gpu power", nvmlDevice)
 

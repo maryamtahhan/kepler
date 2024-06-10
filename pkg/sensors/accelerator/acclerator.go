@@ -103,7 +103,6 @@ func InitAcc(atype string, sleep bool) error {
 		}
 	} else {
 		klog.Errorf("No %s Accelerator collectors found", strings.ToUpper(atype))
-		return errors.New("unsupported accelerator")
 	}
 	return nil
 }

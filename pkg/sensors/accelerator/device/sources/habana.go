@@ -45,6 +45,7 @@ type GPUHabana struct {
 func init() {
 	if err := habanaAccImpl.InitLib(); err != nil {
 		klog.Infof("Error initializing %s: %v", habanaAccImpl.GetName(), err)
+		return
 	}
 	klog.Infof("Using %s to obtain processor power", habanaAccImpl.GetName())
 	dev.AddDeviceInterface(habanaDevice, habanaHwType, habanaDeviceStartup)

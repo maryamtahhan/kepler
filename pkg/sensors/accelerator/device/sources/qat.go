@@ -20,15 +20,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jaypipes/ghw"
 	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device"
 	dev "github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device"
+	"github.com/sustainable-computing-io/kepler/pkg/sensors/accelerator/device/utils"
 	"k8s.io/klog/v2"
 )
 
@@ -42,7 +42,7 @@ const (
 
 var (
 	// telemetry base path
-	teleBasePath = "/sys/devices/pci0000:%s/0000:%s:00.0/telemetry/"
+	teleBasePath = "/sys/kernel/debug/qat_%s_%s/telemetry/"
 
 	// control telemetry switch path
 	controlPath = filepath.Join(teleBasePath, "control")
@@ -54,7 +54,8 @@ var (
 )
 
 type qatDevInfo struct {
-	addr     string
+	bdf      string
+	driver   string
 	datafile *os.File
 }
 
@@ -64,11 +65,14 @@ type QATTelemetry struct {
 }
 
 func init() {
+	if _, err := getQATDevices(); err != nil {
+		klog.Errorf("Error initializing %s: %v", qatDevice, err)
+		return
+	}
 	dev.AddDeviceInterface(qatDevice, qatDevice, qatDeviceStartup)
 }
 
 func qatDeviceStartup() (dev.AcceleratorInterface, error) {
-
 	q := QATTelemetry{
 		collectionSupported: false,
 	}
@@ -99,7 +103,7 @@ func (q *QATTelemetry) InitLib() error {
 	return nil
 }
 
-// Init initizalize and start the QAT metric collector
+// Init initialize and start the QAT metric collector
 func (q *QATTelemetry) Init() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -108,7 +112,7 @@ func (q *QATTelemetry) Init() (err error) {
 	}()
 
 	// get qat devices
-	q.devices, err = getDevices()
+	q.devices, err = getQATDevices()
 	if err != nil {
 		q.collectionSupported = false
 		return err
@@ -181,10 +185,10 @@ func (q *QATTelemetry) GetDeviceUtilizationStats(qat any) (map[any]interface{}, 
 		file := d.datafile
 		deviceUtil, err := getUtilization(file)
 		if err != nil {
-			klog.Errorf("failed to get qat utilization on device %s: %v\n", d.addr, err)
+			klog.Errorf("failed to get qat utilization on device %s: %v\n", d.bdf, err)
 			return qam, err
 		}
-		qatMetrics[d.addr] = deviceUtil
+		qatMetrics[d.bdf] = deviceUtil
 		for k, v := range qatMetrics {
 			qam[k] = v
 		}
@@ -203,55 +207,67 @@ func (q *QATTelemetry) SetDeviceCollectionSupported(supported bool) {
 	q.collectionSupported = supported
 }
 
-// getDevices obtain available qat devices and search for ID
-func getDevices() (map[string]qatDevInfo, error) {
-	// use adf_ctl get qat devices status
-	commandText := "adf_ctl status"
-	cmd := exec.Command("bash", "-c", commandText)
-	statusData, err := cmd.CombinedOutput()
+// getQATDevices obtain available qat devices and search for ID
+func getQATDevices() (map[string]qatDevInfo, error) {
+	devices := make(map[string]qatDevInfo)
+	pci, err := ghw.PCI()
 	if err != nil {
-		return nil, fmt.Errorf("could not get qat status %s", err)
+		klog.Errorf("Error getting PCI info: %v", err)
+		return nil, err
+	}
+	pci_devices := pci.ListDevices()
+	if len(pci_devices) == 0 {
+		fmt.Printf("error: could not retrieve PCI devices\n")
+		return nil, fmt.Errorf("unable to find an available QAT device. Please check the status of QAT")
 	}
 
-	return parseStatusInfo(string(statusData))
-}
+	// for _, device := range pci_devices {
+	// 	vendor := device.Vendor
+	// 	vendorName := vendor.Name
+	// 	if len(vendor.Name) > 20 {
+	// 		vendorName = string([]byte(vendorName)[0:17]) + "..."
+	// 	}
+	// 	product := device.Product
+	// 	productName := product.Name
+	// 	if len(product.Name) > 40 {
+	// 		productName = string([]byte(productName)[0:37]) + "..."
+	// 	}
+	// 	fmt.Printf("%-12s\t%-20s\t%-40s\n", device.Address, vendorName, productName)
+	// }
 
-// parseStatusInfo parse all qat devices information and return available devices
-func parseStatusInfo(statusData string) (map[string]qatDevInfo, error) {
-	// available devices
-	availableDev := make(map[string]qatDevInfo)
-
-	lines := strings.Split(statusData, "\n")
-	// regular expression pattern, matching rows that meet the condition
-	pattern := regexp.MustCompile(`(.*?) - type: (.*?),.* bsf: 0000:(.*?):`)
-
-	for _, line := range lines {
-		// match regular expressions
-		matches := pattern.FindStringSubmatch(line)
-
-		// extract the identifier of the lines starting with 'qat_dev' and confirm the device status is "up"
-		if len(matches) == 4 && !strings.HasSuffix(matches[2], "vf") && strings.Contains(line, "state: up") {
-			qatDev := strings.TrimSpace(matches[1])
-
-			// get the corresponding bsf number
-			bsf := strings.ReplaceAll(matches[3], "0000:", "")
-			availableDev[qatDev] = qatDevInfo{addr: bsf}
+	for _, device := range pci_devices {
+		product := device.Product
+		productName := product.Name
+		if len(product.Name) > 40 {
+			productName = string([]byte(productName)[0:37]) + "..."
+		}
+		if strings.Contains(productName, string([]byte("QAT"))) {
+			if utils.IsQATStatusUp(device.Address) {
+				devices[productName] = qatDevInfo{
+					bdf:    device.Address,
+					driver: device.Driver,
+				}
+			} else {
+				klog.Errorf("found a QAT device %s but its status is down, skipping", device.Address)
+			}
 		}
 	}
 
-	if len(availableDev) == 0 {
+	if len(devices) == 0 {
 		return nil, fmt.Errorf("unable to find an available QAT device. Please check the status of QAT")
 	}
-	return availableDev, nil
+
+	return devices, nil
 }
 
-// controlTelemetry obtain control paths based on QAT information, then turn on/off telemtry
+// controlTelemetry obtain control paths based on QAT information, then turn on/off telemetry
 func controlTelemetry(devices map[string]qatDevInfo, mode int) error {
 	var err error
 	for qatDev, qatInfo := range devices {
 		// path to control the telemetry switch
-		bsf := qatInfo.addr
-		path := fmt.Sprintf(controlPath, bsf, bsf)
+		bsf := qatInfo.bdf
+		driver := qatInfo.driver
+		path := fmt.Sprintf(controlPath, driver, bsf)
 
 		// turn on/off telemetry
 		err = switchTelemetry(path, mode)
@@ -290,7 +306,7 @@ func openDataFile(devices map[string]qatDevInfo) (map[string]qatDevInfo, error) 
 	availableDev := make(map[string]qatDevInfo)
 	for qatDev, qatinfo := range devices {
 		// dataPath that can read data from telemetry
-		bsf := qatinfo.addr
+		bsf := qatinfo.bdf
 
 		dataPath := fmt.Sprintf(deviceDataPath, bsf, bsf)
 
@@ -300,7 +316,7 @@ func openDataFile(devices map[string]qatDevInfo) (map[string]qatDevInfo, error) 
 			delete(devices, qatDev)
 			continue
 		}
-		availableDev[qatDev] = qatDevInfo{addr: bsf, datafile: f}
+		availableDev[qatDev] = qatDevInfo{bdf: bsf, datafile: f}
 	}
 
 	if len(availableDev) == 0 {
