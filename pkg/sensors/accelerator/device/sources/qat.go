@@ -221,20 +221,6 @@ func getQATDevices() (map[string]qatDevInfo, error) {
 		return nil, fmt.Errorf("unable to find an available QAT device. Please check the status of QAT")
 	}
 
-	// for _, device := range pci_devices {
-	// 	vendor := device.Vendor
-	// 	vendorName := vendor.Name
-	// 	if len(vendor.Name) > 20 {
-	// 		vendorName = string([]byte(vendorName)[0:17]) + "..."
-	// 	}
-	// 	product := device.Product
-	// 	productName := product.Name
-	// 	if len(product.Name) > 40 {
-	// 		productName = string([]byte(productName)[0:37]) + "..."
-	// 	}
-	// 	fmt.Printf("%-12s\t%-20s\t%-40s\n", device.Address, vendorName, productName)
-	// }
-
 	for _, device := range pci_devices {
 		product := device.Product
 		productName := product.Name
