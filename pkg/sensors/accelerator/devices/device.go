@@ -1,18 +1,20 @@
-package device
+package devices
 
 import (
 	"sync"
 	"time"
 
+	"github.com/sustainable-computing-io/kepler/pkg/config"
 	"golang.org/x/exp/maps"
 	"k8s.io/klog/v2"
 )
 
 const (
-	DUMMY DeviceType = iota
+	MOCK DeviceType = iota
 	HABANA
 	DCGM
 	NVML
+	MAXDEVICETYPE
 )
 
 var (
@@ -29,7 +31,7 @@ type (
 )
 
 func (d DeviceType) String() string {
-	return [...]string{"DUMMY", "HABANA", "DCGM", "NVML"}[d]
+	return [...]string{"MOCK", "HABANA", "DCGM", "NVML"}[d]
 }
 
 type Device interface {
@@ -66,11 +68,17 @@ type Device interface {
 // Registry gets the default device Registry instance
 func GetRegistry() *Registry {
 	once.Do(func() {
-		globalRegistry = &Registry{
-			Registry: map[string]map[DeviceType]deviceStartupFunc{},
-		}
+		globalRegistry = newRegistry()
+		registerDevices(globalRegistry)
 	})
 	return globalRegistry
+}
+
+// NewRegistry creates a new instance of Registry without registering devices
+func newRegistry() *Registry {
+	return &Registry{
+		Registry: map[string]map[DeviceType]deviceStartupFunc{},
+	}
 }
 
 // SetRegistry replaces the global registry instance
@@ -78,6 +86,15 @@ func GetRegistry() *Registry {
 // after this function is called.
 func SetRegistry(registry *Registry) {
 	globalRegistry = registry
+	registerDevices(globalRegistry)
+}
+
+// Register all available devices in the global registry
+func registerDevices(r *Registry) {
+	// Call individual device check functions
+	dcgmCheck(r)
+	habanaCheck(r)
+	nvmlCheck(r)
 }
 
 func (r *Registry) MustRegister(a string, d DeviceType, deviceStartup deviceStartupFunc) {
@@ -103,29 +120,31 @@ func (r *Registry) Unregister(d DeviceType) {
 	klog.Errorf("Device with type %s doesn't exist", d)
 }
 
-// AddDeviceInterface adds a supported device interface, prints a fatal error in case of double registration.
-func AddDeviceInterface(dtype DeviceType, accType string, deviceStartup deviceStartupFunc) {
+func addDeviceInterface(registry *Registry, dtype DeviceType, accType string, deviceStartup deviceStartupFunc) {
 	switch accType {
-	case "GPU", "DUMMY":
-		// Handle GPU|Dummy device startup function registration
-		if existingDevice := GetRegistry().Registry[accType][dtype]; existingDevice != nil {
+	case config.GPU:
+		// Check if device is already registered
+		if existingDevice := registry.Registry[accType][dtype]; existingDevice != nil {
 			klog.Errorf("Multiple Devices attempting to register with name %q", dtype.String())
 			return
 		}
 
 		if dtype == DCGM {
 			// Remove "nvml" if "dcgm" is being registered
-			GetRegistry().Unregister(NVML)
+			registry.Unregister(NVML)
 		} else if dtype == NVML {
 			// Do not register "nvml" if "dcgm" is already registered
-			if _, ok := GetRegistry().Registry["GPU"][DCGM]; ok {
+			if _, ok := registry.Registry[config.GPU][DCGM]; ok {
 				return
 			}
 		}
+
 		klog.V(5).Infof("Try to Register %s", dtype)
-		GetRegistry().MustRegister(accType, dtype, deviceStartup)
+		registry.MustRegister(accType, dtype, deviceStartup)
 	default:
-		klog.Errorf("Unsupported device type %q", dtype)
+		klog.Info("addDeviceInterface it's NOT a GPU")
+		klog.V(5).Infof("Try to Register %s", dtype)
+		registry.MustRegister(accType, dtype, deviceStartup)
 	}
 
 	klog.V(5).Infof("Registered %s", dtype)
@@ -153,4 +172,8 @@ func Startup(a string) Device {
 	// The device type is unsupported
 	klog.Errorf("unsupported Device")
 	return nil
+}
+
+func Init() {
+	GetRegistry() // init the global device registry
 }
